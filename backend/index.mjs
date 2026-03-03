@@ -76,7 +76,10 @@ async function processSingleFile(fileItem) {
             .download(fileItem.storage_path_original);
 
         if (dlError) throw dlError;
-        await fs.writeFile(inputPath, Buffer.from(await data.arrayBuffer()));
+        const buffer = Buffer.from(await data.arrayBuffer());
+        console.log(`[Backend] File ${fileItem.id} downloaded. Size: ${buffer.length} bytes`);
+        await fs.writeFile(inputPath, buffer);
+        console.log(`[Backend] File ${fileItem.id} written to disk.`);
 
         // 2. Repair
         let success = false;
