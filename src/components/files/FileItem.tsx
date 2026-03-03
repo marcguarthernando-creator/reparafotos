@@ -65,7 +65,7 @@ export const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onDownload }
                         {getStatusLabel(file.status)}
                     </div>
                     {file.status === 'error' && file.errorMsg && (
-                        <span className="text-[10px] opacity-75 max-w-[120px] truncate" title={file.errorMsg}>
+                        <span className="text-[10px] font-bold text-rose-500 leading-tight text-center max-w-[150px]" title={file.errorMsg}>
                             {file.errorMsg}
                         </span>
                     )}

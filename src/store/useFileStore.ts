@@ -31,7 +31,17 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
     addFiles: async (newFiles: File[]) => {
         const { accessKey, jobId } = get();
+
+        // Debugging logs for the user
+        console.log('[Store] DEBUG: VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL ? 'PRESENT' : 'MISSING');
         console.log('[Store] Adding files...', { count: newFiles.length, hasJob: !!jobId });
+
+        if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+            const error = 'Faltan las llaves de Supabase en Vercel';
+            const pendingFiles = newFiles.map(file => ({ id: Math.random().toString(), name: file.name, status: 'error' as any, errorMsg: error }));
+            set(state => ({ files: [...state.files, ...pendingFiles as any] }));
+            return;
+        }
 
         // 1. Pre-add files to UI for immediate feedback
         const pendingFiles = newFiles.map(file => {
@@ -58,7 +68,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
             };
         });
 
-        set(state => ({ files: [...state.files, ...pendingFiles] }));
+        set(state => ({ files: [...state.files, ...pendingFiles as any] }));
 
         try {
             // 2. Create Job if it doesn't exist

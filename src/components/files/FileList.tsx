@@ -11,6 +11,7 @@ export interface FileData {
     type: 'jpg' | 'mp4' | 'other';
     status: FileStatus;
     progress?: number;
+    errorMsg?: string;
 }
 
 interface FileListProps {
