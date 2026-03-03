@@ -31,72 +31,86 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
     addFiles: async (newFiles: File[]) => {
         const { accessKey, jobId } = get();
+        console.log('[Store] Adding files...', { count: newFiles.length, hasJob: !!jobId });
 
-        // 1. Create Job if it doesn't exist
-        let currentJobId = jobId;
-        if (!currentJobId) {
-            const { data, error } = await supabase
-                .from('jobs')
-                .insert([{ access_key: accessKey }])
-                .select()
-                .single();
-
-            if (error) {
-                console.error('Error creating job:', error);
-                return;
-            }
-            currentJobId = data.id;
-            set({ jobId: currentJobId });
-        }
-
-        // 2. Prepare files for UI and upload
-        const uploads = newFiles.map(async (file: File) => {
+        // 1. Pre-add files to UI for immediate feedback
+        const pendingFiles = newFiles.map(file => {
             const id = Math.random().toString(36).substring(7);
             const isMp4 = file.name.toLowerCase().endsWith('.mp4');
             const isJpg = file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg');
             const fileType = isMp4 ? 'mp4' : (isJpg ? 'jpg' : 'other');
 
-            // Add to UI immediately as 'uploaded' (starting upload)
-            const newFileObj: FileData = {
+            return {
                 id,
                 name: file.name,
                 size: file.size,
                 type: fileType as any,
-                status: 'uploaded',
+                status: 'uploaded' as const,
+                fileRaw: file // Temporary store for the raw file
             };
-            set(state => ({ files: [...state.files, newFileObj] }));
-
-            // Upload to Storage
-            const storagePath = `${currentJobId}/${id}_${file.name}`;
-            const { error: uploadError } = await supabase.storage
-                .from('originals')
-                .upload(storagePath, file);
-
-            if (uploadError) {
-                console.error('Upload error:', uploadError);
-                get().setFileStatus(id, 'error');
-                return;
-            }
-
-            // Record in Database
-            const { error: dbError } = await supabase
-                .from('files')
-                .insert([{
-                    job_id: currentJobId,
-                    original_name: file.name,
-                    file_type: fileType,
-                    size_bytes: file.size,
-                    storage_path_original: storagePath,
-                    repair_status: 'pending'
-                }]);
-
-            if (dbError) {
-                console.error('DB error:', dbError);
-                get().setFileStatus(id, 'error');
-            }
         });
 
-        await Promise.all(uploads);
+        set(state => ({ files: [...state.files, ...pendingFiles] }));
+
+        try {
+            // 2. Create Job if it doesn't exist
+            let currentJobId = jobId;
+            if (!currentJobId) {
+                console.log('[Store] Creating new job...');
+                const { data, error } = await supabase
+                    .from('jobs')
+                    .insert([{ access_key: accessKey }])
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error('[Store] Error creating job:', error);
+                    pendingFiles.forEach(f => get().setFileStatus(f.id, 'error'));
+                    return;
+                }
+                currentJobId = data.id;
+                set({ jobId: currentJobId });
+                console.log('[Store] Job created:', currentJobId);
+            }
+
+            // 3. Upload files to Storage and DB
+            for (const f of pendingFiles) {
+                const storagePath = `${currentJobId}/${f.id}_${f.name}`;
+                console.log(`[Store] Uploading ${f.name}...`);
+
+                const { error: uploadError } = await supabase.storage
+                    .from('originals')
+                    .upload(storagePath, f.fileRaw);
+
+                if (uploadError) {
+                    console.error(`[Store] Upload error for ${f.name}:`, uploadError);
+                    get().setFileStatus(f.id, 'error');
+                    continue;
+                }
+
+                const { error: dbError } = await supabase
+                    .from('files')
+                    .insert([{
+                        id: f.id, // Use the same ID for consistency
+                        job_id: currentJobId,
+                        original_name: f.name,
+                        file_type: f.type,
+                        size_bytes: f.size,
+                        storage_path_original: storagePath,
+                        repair_status: 'pending'
+                    }]);
+
+                if (dbError) {
+                    console.error(`[Store] DB error for ${f.name}:`, dbError);
+                    get().setFileStatus(f.id, 'error');
+                } else {
+                    console.log(`[Store] ${f.name} successfully uploaded and recorded.`);
+                }
+            }
+        } catch (err) {
+            console.error('[Store] Critical failure in addFiles:', err);
+            pendingFiles.forEach(f => get().setFileStatus(f.id, 'error'));
+        }
     },
 
     removeFile: (id: string) => set((state) => ({
@@ -110,22 +124,18 @@ export const useFileStore = create<FileStore>((set, get) => ({
         set({ isProcessing: true, globalProgress: 10 });
 
         try {
-            // 1. Update Job status
             await supabase
                 .from('jobs')
                 .update({ status: 'processing' })
                 .eq('id', jobId);
 
-            // 2. Call the backend service
             const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-
             const response = await fetch(`${BACKEND_URL}/process/${jobId}`, {
                 method: 'POST',
             });
 
             if (!response.ok) throw new Error('Backend error');
 
-            // 3. Start Polling for file status
             const pollInterval = setInterval(async () => {
                 const { data: updatedFiles, error } = await supabase
                     .from('files')
@@ -158,9 +168,6 @@ export const useFileStore = create<FileStore>((set, get) => ({
     },
 
     downloadFile: async (id: string) => {
-        const file = get().files.find(f => f.id === id);
-        if (!file) return;
-
         const { data: fileData, error } = await supabase
             .from('files')
             .select('storage_path_repaired')
@@ -180,7 +187,6 @@ export const useFileStore = create<FileStore>((set, get) => ({
     downloadZip: async () => {
         const { jobId } = get();
         if (!jobId) return;
-
         const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
         window.open(`${BACKEND_URL}/download-zip/${jobId}`, '_blank');
     },
