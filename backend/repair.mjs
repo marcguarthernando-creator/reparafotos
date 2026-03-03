@@ -21,13 +21,6 @@ export async function repairMp4(inputPath, outputPath) {
             })
             .on('error', (err) => {
                 console.warn('[FFmpeg] Remux failed, trying re-encode...', err.message);
-                // The following lines appear to be misplaced and unrelated to FFmpeg repair logic.
-                // They are included as per the user's instruction, but will cause a syntax error
-                // and runtime issues if `dlError`, `data`, `fileItem` are not defined.
-                // if (dlError) throw dlError;
-                // const buffer = Buffer.from(await data.arrayBuffer());
-                // console.log(`[Backend] File ${fileItem.id} downloaded. Size: ${buffer.length} bytes`);
-                // await fs.writeFile(inputPath, buffer);
                 // Fallback: Re-encode
                 ffmpeg(inputPath)
                     .outputOptions(['-map', '0', '-c:v', 'libx264', '-c:a', 'aac']) // Corrected 'tputOptions' to 'outputOptions'
