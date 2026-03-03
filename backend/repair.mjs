@@ -44,26 +44,41 @@ export async function repairMp4(inputPath, outputPath) {
 export async function repairJpg(inputPath, outputPath) {
     return new Promise((resolve, reject) => {
         console.log(`[FFmpeg] Repairing JPG: ${inputPath}`);
-        // Try to re-encode the image to "fix" headers/data
+
+        // Strategy 1: Standard re-encode with high quality
         ffmpeg(inputPath)
-            .outputOptions(['-q:v', '2']) // High quality
+            .outputOptions(['-q:v', '2'])
             .on('end', () => {
-                console.log('[FFmpeg] JPG Repair Success');
+                console.log('[FFmpeg] JPG Strategy 1 (Standard) Success');
                 resolve(true);
             })
             .on('error', (err) => {
-                console.warn('[FFmpeg] JPG basic repair failed, trying forced format...', err.message);
+                console.warn('[FFmpeg] JPG Strategy 1 failed, trying Strategy 2 (Ignore Errors)...', err.message);
 
-                // Fallback: Force mjpeg input format
+                // Strategy 2: Ignore errors and force mjpeg
                 ffmpeg(inputPath)
-                    .inputFormat('mjpeg')
+                    .inputOptions(['-err_detect', 'ignore_err'])
+                    .outputOptions(['-q:v', '2', '-f', 'image2'])
                     .on('end', () => {
-                        console.log('[FFmpeg] JPG Forced MJPEG Success');
+                        console.log('[FFmpeg] JPG Strategy 2 (Ignore Errors) Success');
                         resolve(true);
                     })
                     .on('error', (reErr) => {
-                        console.error('[FFmpeg] JPG Fatal Error:', reErr.message);
-                        reject(reErr);
+                        console.warn('[FFmpeg] JPG Strategy 2 failed, trying Strategy 3 (Forced MJPEG Format)...', reErr.message);
+
+                        // Strategy 3: Most aggressive - treat everything as mjpeg stream
+                        ffmpeg(inputPath)
+                            .inputFormat('mjpeg')
+                            .outputOptions(['-q:v', '5']) // Lower quality but more tolerant
+                            .on('end', () => {
+                                console.log('[FFmpeg] JPG Strategy 3 (Forced MJPEG) Success');
+                                resolve(true);
+                            })
+                            .on('error', (lastErr) => {
+                                console.error('[FFmpeg] JPG Final Failure:', lastErr.message);
+                                reject(lastErr);
+                            })
+                            .save(outputPath);
                     })
                     .save(outputPath);
             })
