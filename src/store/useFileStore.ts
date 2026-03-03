@@ -14,7 +14,7 @@ interface FileStore {
     removeFile: (id: string) => void;
     unlock: (key: string) => void;
     startProcessing: () => Promise<void>;
-    setFileStatus: (id: string, status: FileData['status']) => void;
+    setFileStatus: (id: string, status: FileData['status'], errorMsg?: string) => void;
     downloadFile: (id: string) => Promise<void>;
     downloadZip: () => Promise<void>;
 }
@@ -73,7 +73,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
                 if (jobError) {
                     console.error('[Store] Error creating job:', jobError);
-                    pendingFiles.forEach(f => get().setFileStatus(f.id, 'error'));
+                    pendingFiles.forEach(f => get().setFileStatus(f.id, 'error', jobError.message));
                     return;
                 }
                 currentJobId = jobData.id;
@@ -88,11 +88,11 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
                 const { error: uploadError } = await supabase.storage
                     .from('originals')
-                    .upload(storagePath, f.fileRaw);
+                    .upload(storagePath, (f as any).fileRaw);
 
                 if (uploadError) {
                     console.error(`[Store] Upload error for ${f.name}:`, uploadError);
-                    get().setFileStatus(f.id, 'error');
+                    get().setFileStatus(f.id, 'error', uploadError.message);
                     continue;
                 }
 
@@ -111,14 +111,14 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
                 if (dbError) {
                     console.error(`[Store] DB error for ${f.name}:`, dbError);
-                    get().setFileStatus(f.id, 'error');
+                    get().setFileStatus(f.id, 'error', dbError.message);
                 } else {
                     console.log(`[Store] ${f.name} successfully uploaded and recorded.`);
                 }
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Store] Critical failure in addFiles:', err);
-            pendingFiles.forEach(f => get().setFileStatus(f.id, 'error'));
+            pendingFiles.forEach(f => get().setFileStatus(f.id, 'error', err.message));
         }
     },
 
@@ -200,7 +200,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
         window.open(`${BACKEND_URL}/download-zip/${jobId}`, '_blank');
     },
 
-    setFileStatus: (id: string, status: FileData['status']) => set((state) => ({
-        files: state.files.map(f => f.id === id ? { ...f, status } : f)
+    setFileStatus: (id: string, status: FileData['status'], errorMsg?: string) => set((state) => ({
+        files: state.files.map(f => f.id === id ? { ...f, status, errorMsg } : f)
     })),
 }));

@@ -57,11 +57,18 @@ export const FileItem: React.FC<FileItemProps> = ({ file, onRemove, onDownload }
             </div>
 
             <div className="flex items-center gap-4">
-                <div className={`px-3 py-1.5 rounded-full border text-xs font-bold flex items-center gap-2 ${getStatusStyles(file.status)}`}>
-                    {file.status === 'processing' && <Loader2 size={14} className="animate-spin" />}
-                    {file.status === 'repaired' && <CheckCircle2 size={14} />}
-                    {file.status === 'irrecoverable' && <AlertCircle size={14} />}
-                    {getStatusLabel(file.status)}
+                <div className={`px-3 py-1.5 rounded-full border text-xs font-bold flex flex-col items-center gap-2 ${getStatusStyles(file.status)}`}>
+                    <div className="flex items-center gap-2">
+                        {file.status === 'processing' && <Loader2 size={14} className="animate-spin" />}
+                        {file.status === 'repaired' && <CheckCircle2 size={14} />}
+                        {file.status === 'irrecoverable' && <AlertCircle size={14} />}
+                        {getStatusLabel(file.status)}
+                    </div>
+                    {file.status === 'error' && file.errorMsg && (
+                        <span className="text-[10px] opacity-75 max-w-[120px] truncate" title={file.errorMsg}>
+                            {file.errorMsg}
+                        </span>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-1">
