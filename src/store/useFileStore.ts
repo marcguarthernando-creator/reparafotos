@@ -35,7 +35,15 @@ export const useFileStore = create<FileStore>((set, get) => ({
 
         // 1. Pre-add files to UI for immediate feedback
         const pendingFiles = newFiles.map(file => {
-            const id = Math.random().toString(36).substring(7);
+            // Use crypto.randomUUID() for a valid UUID or fallback to a generated one
+            const id = typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+
             const isMp4 = file.name.toLowerCase().endsWith('.mp4');
             const isJpg = file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg');
             const fileType = isMp4 ? 'mp4' : (isJpg ? 'jpg' : 'other');
@@ -46,7 +54,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
                 size: file.size,
                 type: fileType as any,
                 status: 'uploaded' as const,
-                fileRaw: file // Temporary store for the raw file
+                fileRaw: file
             };
         });
 
@@ -57,18 +65,18 @@ export const useFileStore = create<FileStore>((set, get) => ({
             let currentJobId = jobId;
             if (!currentJobId) {
                 console.log('[Store] Creating new job...');
-                const { data, error } = await supabase
+                const { data: jobData, error: jobError } = await supabase
                     .from('jobs')
                     .insert([{ access_key: accessKey }])
                     .select()
                     .single();
 
-                if (error) {
-                    console.error('[Store] Error creating job:', error);
+                if (jobError) {
+                    console.error('[Store] Error creating job:', jobError);
                     pendingFiles.forEach(f => get().setFileStatus(f.id, 'error'));
                     return;
                 }
-                currentJobId = data.id;
+                currentJobId = jobData.id;
                 set({ jobId: currentJobId });
                 console.log('[Store] Job created:', currentJobId);
             }
@@ -76,7 +84,7 @@ export const useFileStore = create<FileStore>((set, get) => ({
             // 3. Upload files to Storage and DB
             for (const f of pendingFiles) {
                 const storagePath = `${currentJobId}/${f.id}_${f.name}`;
-                console.log(`[Store] Uploading ${f.name}...`);
+                console.log(`[Store] Uploading ${f.name} to storage...`);
 
                 const { error: uploadError } = await supabase.storage
                     .from('originals')
@@ -88,10 +96,11 @@ export const useFileStore = create<FileStore>((set, get) => ({
                     continue;
                 }
 
+                console.log(`[Store] Recording ${f.name} in database...`);
                 const { error: dbError } = await supabase
                     .from('files')
                     .insert([{
-                        id: f.id, // Use the same ID for consistency
+                        id: f.id,
                         job_id: currentJobId,
                         original_name: f.name,
                         file_type: f.type,
