@@ -148,12 +148,17 @@ export const useFileStore = create<FileStore>((set, get) => ({
                 .update({ status: 'processing' })
                 .eq('id', jobId);
 
-            const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+            const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://reparafotos.onrender.com';
+            console.log('[Store] Triggering repair at:', `${BACKEND_URL}/process/${jobId}`);
+
             const response = await fetch(`${BACKEND_URL}/process/${jobId}`, {
                 method: 'POST',
             });
 
-            if (!response.ok) throw new Error('Backend error');
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || 'Error al conectar con el servidor de reparación');
+            }
 
             const pollInterval = setInterval(async () => {
                 const { data: updatedFiles, error } = await supabase
@@ -180,9 +185,10 @@ export const useFileStore = create<FileStore>((set, get) => ({
                 }
             }, 2000);
 
-        } catch (err) {
+        } catch (err: any) {
             console.error('Processing error:', err);
             set({ isProcessing: false });
+            alert(`No se pudo iniciar la reparación: ${err.message}`);
         }
     },
 

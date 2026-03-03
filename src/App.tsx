@@ -45,14 +45,25 @@ function App() {
           onDownload={(id) => useFileStore.getState().downloadFile(id)}
         />
 
-        {hasFiles && !isProcessing && !allRepaired && (
+        {hasFiles && !allRepaired && (
           <div className="pt-8 flex justify-center">
             <button
               onClick={startProcessing}
-              className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl active:scale-95"
+              disabled={isProcessing}
+              className={`flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold transition-all shadow-lg active:scale-95 ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-800 hover:shadow-xl'
+                }`}
             >
-              <Play size={20} fill="currentColor" />
-              Reparar todo el lote
+              {isProcessing ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Play size={20} fill="currentColor" />
+                  Reparar todo el lote
+                </>
+              )}
             </button>
           </div>
         )}
